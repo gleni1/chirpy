@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
   "sync/atomic"
-  "fmt"
+  // "fmt"
 )
 
 type apiConfig struct {
@@ -18,8 +18,9 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
   })
 }
 
-func (cfg *apiConfig) reqNumHandler(w http.ResponseWriter, r *http.Request) {
-  w.Write([]byte(fmt.Sprintf("Hits: %d", cfg.fileserverHits.Load()))) 
+func (cfg *apiConfig) resetNumReq(w http.ResponseWriter, r *http.Request) {
+  cfg.fileserverHits.Store(0)
+  w.Write([]byte("File server hits set to 0"))
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
@@ -34,8 +35,9 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/app/", cfg.middlewareMetricsInc(http.HandlerFunc(homeHandler)))
-	mux.HandleFunc("/healthz", handlerReadiness)
-	mux.HandleFunc("/metrics", cfg.reqNumHandler)
+	mux.HandleFunc("GET /api/healthz", handlerReadiness)
+	mux.HandleFunc("GET /admin/metrics", cfg.metrics)
+	mux.HandleFunc("POST /admin/reset", cfg.resetNumReq)
 
 	srv := &http.Server{
 		Addr:    ":" + port,
