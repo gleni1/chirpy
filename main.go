@@ -5,11 +5,17 @@ import (
 	"net/http"
   "sync/atomic"
   "encoding/json"
-  // "fmt"
+  "database/sql"
+  "context"
+  "os"
+  "chirpy/internal/database"
+  "github.com/joho/godotenv"
+  "fmt"
 )
 
 type apiConfig struct {
   fileserverHits  atomic.Int32
+  db              *database.Queries
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -20,8 +26,23 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 }
 
 func (cfg *apiConfig) resetNumReq(w http.ResponseWriter, r *http.Request) {
-  cfg.fileserverHits.Store(0)
-  w.Write([]byte("File server hits set to 0"))
+  err := godotenv.Load()
+  if err != nil {
+    log.Fatalf("Error loading .env file: %w", err)
+  }
+  isDev := os.Getenv("PLATFORM")
+  if isDev == "dev" {
+    err = cfg.db.DeleteUsers(context.Background())
+    if err != nil {
+      w.WriteHeader(http.StatusInternalServerError)
+      fmt.Errorf("Error deleting users: %w", err)
+    }
+
+    cfg.fileserverHits.Store(0)
+    w.Write([]byte("File server hits set to 0"))
+  } else {
+    w.WriteHeader(http.StatusForbidden)
+  }
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
@@ -53,17 +74,36 @@ func handleResponseBody (w http.ResponseWriter, r *http.Request, msg string, stC
   return data, nil
 }
 
+const dbURL = "postgres://mariglenpoleshi:@localhost:5432/chirpy?sslmode=disable"
+
+
 func main() {
   var cfg = &apiConfig{}
 	const filepathRoot = "."
 	const port = "8080"
 
+  //start database 
+  db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatalf("error connecting to db: %v", err)
+	}
+	defer db.Close()
+
+  dbQueries := database.New(db)
+
+  apiCfg := apiConfig{
+    fileserverHits: atomic.Int32{},
+    db:             dbQueries,
+  }
+
 	mux := http.NewServeMux()
 	mux.Handle("/app/", cfg.middlewareMetricsInc(http.HandlerFunc(homeHandler)))
 	mux.HandleFunc("GET /api/healthz", handlerReadiness)
 	mux.HandleFunc("GET /admin/metrics", cfg.metrics)
-	mux.HandleFunc("POST /admin/reset", cfg.resetNumReq)
+  // the below request should be a DELETE method instead
+	mux.HandleFunc("POST /admin/reset", apiCfg.resetNumReq)
   mux.HandleFunc("POST /api/validate_chirp", handlerChirpsValidate)
+  mux.HandleFunc("POST /api/users", apiCfg.handleCreateNewUser)
 
 	srv := &http.Server{
 		Addr:    ":" + port,
