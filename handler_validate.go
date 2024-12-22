@@ -1,8 +1,8 @@
 package main 
 
 import (
-  "encoding/json"
-  "net/http"
+  // "encoding/json"
+  // "net/http"
   "strings"
 )
 
@@ -30,32 +30,4 @@ func cleanChirpBody(msgBody string) string {
   }
   cleanMsg := strings.Join(words, " ")
   return cleanMsg
-}
-
-
-func handlerChirpsValidate(w http.ResponseWriter, r *http.Request) {
-  var chrp chirp
-  decoder := json.NewDecoder(r.Body)
-  err := decoder.Decode(&chrp)
-  
-  if err != nil {
-    respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters", err)
-    return 
-  }
-
-  const maxChirpLength = 140 
-  if len(chrp.Body) > maxChirpLength {
-    respondWithError(w, http.StatusBadRequest, "Chirp is too long", nil)
-    return 
-  }
-  
-  cleanedBody := cleanChirpBody(chrp.Body)
-  if err != nil {
-    respondWithError(w, http.StatusInternalServerError, "Couldn't clean chirp body", err)
-    return
-  }
-
-  respondWithJSON(w, http.StatusOK, returnVal {
-    BodyMsg: cleanedBody,
-  })
 }

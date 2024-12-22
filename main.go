@@ -74,14 +74,14 @@ func handleResponseBody (w http.ResponseWriter, r *http.Request, msg string, stC
   return data, nil
 }
 
-const dbURL = "postgres://mariglenpoleshi:@localhost:5432/chirpy?sslmode=disable"
-
 
 func main() {
   var cfg = &apiConfig{}
 	const filepathRoot = "."
 	const port = "8080"
-
+  
+  godotenv.Load()
+  dbURL := os.Getenv("DB_URL") 
   //start database 
   db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -102,8 +102,9 @@ func main() {
 	mux.HandleFunc("GET /admin/metrics", cfg.metrics)
   // the below request should be a DELETE method instead
 	mux.HandleFunc("POST /admin/reset", apiCfg.resetNumReq)
-  mux.HandleFunc("POST /api/validate_chirp", handlerChirpsValidate)
+  // mux.HandleFunc("POST /api/validate_chirp", handlerChirpsValidate)
   mux.HandleFunc("POST /api/users", apiCfg.handleCreateNewUser)
+  mux.HandleFunc("POST /api/chirps", apiCfg.handleCreateChirp)
 
 	srv := &http.Server{
 		Addr:    ":" + port,
