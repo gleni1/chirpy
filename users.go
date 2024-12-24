@@ -3,6 +3,7 @@ package main
 import (
   "fmt"
   "chirpy/internal/database"
+  "chirpy/internal/auth"
   "time"
   "net/http"
   "encoding/json"
@@ -11,29 +12,43 @@ import (
   _ "github.com/lib/pq"
 )
 
-type Email struct {
+type UserData struct {
+  Password  string  `json:"password"`
 	EmailVal string `json:"email"`
 }
 
+type UserResponse struct {
+    ID        uuid.UUID `json:"id"`
+    Email     string    `json:"email"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+}
 
 func (apiCfg *apiConfig) handleCreateNewUser(w http.ResponseWriter, r *http.Request) {
-  var email Email
+  var usrData UserData
   decoder := json.NewDecoder(r.Body)
-  err := decoder.Decode(&email)
+  err := decoder.Decode(&usrData)
   if err != nil {
     w.WriteHeader(http.StatusBadRequest)
-    fmt.Errorf("Error decoding the email json in the request body: %w", err)
+    fmt.Errorf("Error decoding the user data json in the request body: %w", err)
     return
   }
-  emailVal := email.EmailVal
-  
-  userParams := database.CreateUserParams {
-    ID:           uuid.New(),
-    CreatedAt:    time.Now(),
-    UpdatedAt:    time.Now(),
-    Email:        emailVal, 
-  } 
+  emailVal := usrData.EmailVal
+  unHashedPass := usrData.Password
+  passwordVal, err := auth.HashPassword(unHashedPass)
+  if err != nil {
+    w.WriteHeader(http.StatusBadRequest)
+    fmt.Errorf("Error hashing the password")
+    return
+  }
 
+  userParams := database.CreateUserParams {
+    ID:             uuid.New(),
+    CreatedAt:      time.Now(),
+    UpdatedAt:      time.Now(),
+    Email:          emailVal, 
+    HashedPassword: passwordVal,
+  } 
 
   user, err := apiCfg.db.CreateUser(context.Background(), userParams) 
   if err != nil {
@@ -42,7 +57,14 @@ func (apiCfg *apiConfig) handleCreateNewUser(w http.ResponseWriter, r *http.Requ
     return
   }
 
-  data, err := json.Marshal(user)
+  response := UserResponse {
+    ID:           user.ID,
+    Email:        user.Email,
+    CreatedAt:    user.CreatedAt,
+    UpdatedAt:    user.UpdatedAt,
+  }
+
+  data, err := json.Marshal(response)
   if err != nil {
     w.WriteHeader(http.StatusInternalServerError)
     fmt.Errorf("Error encoding the userParams: %w", err)
@@ -55,4 +77,48 @@ func (apiCfg *apiConfig) handleCreateNewUser(w http.ResponseWriter, r *http.Requ
   return
 }
 
+func (apiCfg *apiConfig) handleUserLogin(w http.ResponseWriter, r *http.Request) {
+  var usrData UserData
+  decoder := json.NewDecoder(r.Body)
+  err := decoder.Decode(&usrData)
+  if err != nil {
+    w.WriteHeader(http.StatusBadRequest)
+    fmt.Errorf("Error decoding the user data json in the request body: %w", err)
+    return
+  }
+  emailVal := usrData.EmailVal
+  unHashedPass := usrData.Password
 
+  user, err := apiCfg.db.UserByEmail(context.Background(), emailVal)
+  if err != nil {
+    w.WriteHeader(http.StatusInternalServerError)
+    fmt.Errorf("Error fetching user by email")
+    return
+  }
+
+  err = auth.CheckPasswordHash(unHashedPass, user.HashedPassword)
+  if err != nil {
+    w.WriteHeader(http.StatusUnauthorized)
+    return
+  }
+
+  response := UserResponse {
+    ID:           user.ID,
+    Email:        user.Email,
+    CreatedAt:    user.CreatedAt,
+    UpdatedAt:    user.UpdatedAt,
+  }
+
+  data, err := json.Marshal(response)
+  if err != nil {
+    w.WriteHeader(http.StatusInternalServerError)
+    fmt.Errorf("Error encoding the userParams: %w", err)
+    return
+  }
+
+  w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+  w.Write(data)
+  return
+  
+}
