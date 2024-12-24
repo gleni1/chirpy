@@ -3,6 +3,9 @@ package main
 import (
   "chirpy/internal/database"
   "time"
+  "log"
+  "errors"
+  "database/sql"
   "net/http"
   "encoding/json"
   "context"
@@ -56,4 +59,62 @@ func (cfg *apiConfig) handleCreateChirp(w http.ResponseWriter, r *http.Request) 
   w.WriteHeader(http.StatusCreated)
   w.Write(data)
   return
+}
+	
+func (cfg *apiConfig) handleGetChirps(w http.ResponseWriter, r *http.Request) {
+  if r.Method != http.MethodGet {
+    http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+    return
+  }
+
+  chirps, err := cfg.db.GetAllChirps(context.Background())
+  if err != nil {
+    http.Error(w, "Internal server error:", http.StatusInternalServerError)
+    return 
+  }
+
+
+  w.Header().Set("Content-Type", "application/json; charset=utf-8")
+  w.WriteHeader(http.StatusOK)
+
+  encoder := json.NewEncoder(w)
+  err = encoder.Encode(chirps)
+  if err != nil {
+    log.Printf("Error encoding response: %w", err)
+    return
+  }
+}
+
+
+func (cfg *apiConfig) handleGetOneChirp(w http.ResponseWriter, r *http.Request) {
+  if r.Method != http.MethodGet {
+    http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+    return
+  }
+
+  chirpId := r.PathValue("chirpID")
+  parsedID, err := uuid.Parse(chirpId)
+  if err != nil {
+    w.WriteHeader(http.StatusNotFound)
+    return
+  }
+  chirp, err := cfg.db.GetOneChirp(context.Background(), parsedID)
+  if err != nil {
+    if errors.Is(err, sql.ErrNoRows) {
+      w.WriteHeader(http.StatusNotFound)
+      return
+    }
+    http.Error(w, "Internal server error", http.StatusInternalServerError)
+    return
+  }
+
+  w.Header().Set("Content-Type", "application/json; charset=utf-8")
+  w.WriteHeader(http.StatusOK)
+
+  encoder := json.NewEncoder(w)
+  err = encoder.Encode(chirp)
+  if err != nil {
+    log.Printf("Error encoding response: %v", err)
+    return
+  }
 }
