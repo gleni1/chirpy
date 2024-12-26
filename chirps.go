@@ -2,8 +2,10 @@ package main
 
 import (
   "chirpy/internal/database"
+  "chirpy/internal/auth"
   "time"
   "log"
+  "fmt"
   "errors"
   "database/sql"
   "net/http"
@@ -26,22 +28,36 @@ func (cfg *apiConfig) handleCreateChirp(w http.ResponseWriter, r *http.Request) 
     respondWithError(w, http.StatusBadRequest, "Chirp is too long", nil)
     return 
   }
+
+  token, err := auth.GetBearerToken(r.Header)
+  if err != nil {
+    fmt.Printf("GetBearerToken error: %v\n", err) // Debug log
+    w.WriteHeader(http.StatusUnauthorized)
+    return
+  }
+
+  userID, err := auth.ValidateJWT(token, cfg.SecretKey)
+  if err != nil {
+    fmt.Printf("ValidateJWT error: %v\n", err) // Debug log
+    w.WriteHeader(http.StatusUnauthorized)
+    return
+  }
   
 
   decoder := json.NewDecoder(r.Body)
-  err := decoder.Decode(&chirp)
+  err = decoder.Decode(&chirp)
   if err != nil {
     w.WriteHeader(http.StatusInternalServerError)
     return
   }
   cleanBodyMessage := cleanChirpBody(chirp.Body)
-  user_id := uuid.MustParse(chirp.UserID)
+  //user_id := uuid.MustParse(chirp.UserID)
   postParams := database.CreateChirpParams {
     ID:  uuid.New(),
     CreatedAt:  time.Now(),
     UpdatedAt:  time.Now(),
     Body:       cleanBodyMessage,
-    UserID:     user_id, 
+    UserID:     userID, 
   } 
   post, err := cfg.db.CreateChirp(context.Background(), postParams)
   if err != nil {

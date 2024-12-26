@@ -14,14 +14,26 @@ import (
 
 type UserData struct {
   Password  string  `json:"password"`
-	EmailVal string `json:"email"`
+	EmailVal  string  `json:"email"`
+  Expiry    int    `json:"expires_in_seconds,omitempty"`
 }
 
 type UserResponse struct {
     ID        uuid.UUID `json:"id"`
     Email     string    `json:"email"`
+    Token     string    `json:"token"`
     CreatedAt time.Time `json:"created_at"`
     UpdatedAt time.Time `json:"updated_at"`
+}
+
+func getExpirationDuration(seconds int) time.Duration {
+  if seconds <= 0 {
+    return time.Hour 
+  }
+  if seconds > 3600 {
+    return time.Hour 
+  }
+  return time.Duration(seconds) * time.Second
 }
 
 func (apiCfg *apiConfig) handleCreateNewUser(w http.ResponseWriter, r *http.Request) {
@@ -78,6 +90,7 @@ func (apiCfg *apiConfig) handleCreateNewUser(w http.ResponseWriter, r *http.Requ
 }
 
 func (apiCfg *apiConfig) handleUserLogin(w http.ResponseWriter, r *http.Request) {
+
   var usrData UserData
   decoder := json.NewDecoder(r.Body)
   err := decoder.Decode(&usrData)
@@ -102,9 +115,19 @@ func (apiCfg *apiConfig) handleUserLogin(w http.ResponseWriter, r *http.Request)
     return
   }
 
+  // call the JWT function
+  expirationTime := getExpirationDuration(usrData.Expiry)
+  jwtToken, err := auth.MakeJWT(user.ID, apiCfg.SecretKey, expirationTime)
+  if err != nil {
+    w.WriteHeader(http.StatusInternalServerError)
+    fmt.Errorf("Error getting token")
+    return
+  }
+  
   response := UserResponse {
     ID:           user.ID,
     Email:        user.Email,
+    Token:        jwtToken,
     CreatedAt:    user.CreatedAt,
     UpdatedAt:    user.UpdatedAt,
   }
@@ -120,5 +143,4 @@ func (apiCfg *apiConfig) handleUserLogin(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusOK)
   w.Write(data)
   return
-  
 }
