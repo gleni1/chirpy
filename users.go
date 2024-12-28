@@ -7,6 +7,7 @@ import (
   "time"
   "net/http"
   "encoding/json"
+  "database/sql"
   "context"
   "github.com/google/uuid"
   _ "github.com/lib/pq"
@@ -15,15 +16,16 @@ import (
 type UserData struct {
   Password  string  `json:"password"`
 	EmailVal  string  `json:"email"`
-  Expiry    int    `json:"expires_in_seconds,omitempty"`
+  // Expiry    int    `json:"expires_in_seconds,omitempty"`
 }
 
 type UserResponse struct {
-    ID        uuid.UUID `json:"id"`
-    Email     string    `json:"email"`
-    Token     string    `json:"token"`
-    CreatedAt time.Time `json:"created_at"`
-    UpdatedAt time.Time `json:"updated_at"`
+    ID            uuid.UUID `json:"id"`
+    Email         string    `json:"email"`
+    CreatedAt     time.Time `json:"created_at"`
+    UpdatedAt     time.Time `json:"updated_at"`
+    Token         string    `json:"token"`
+    RefreshToken  string    `json:"refresh_token"`
 }
 
 func getExpirationDuration(seconds int) time.Duration {
@@ -115,19 +117,43 @@ func (apiCfg *apiConfig) handleUserLogin(w http.ResponseWriter, r *http.Request)
     return
   }
 
-  // call the JWT function
-  expirationTime := getExpirationDuration(usrData.Expiry)
-  jwtToken, err := auth.MakeJWT(user.ID, apiCfg.SecretKey, expirationTime)
+  jwtToken, err := auth.MakeJWT(user.ID, apiCfg.SecretKey)
   if err != nil {
     w.WriteHeader(http.StatusInternalServerError)
     fmt.Errorf("Error getting token")
     return
   }
-  
+ 
+  refreshTokenString, err := auth.MakeRefreshToken()
+  if err != nil {
+    w.WriteHeader(http.StatusInternalServerError)
+    fmt.Errorf("Error getting refresh token string")
+    return
+  }
+
+  // calculate expirationTime for refresh_token
+  expiryDate := time.Now().Add(60 * 24 * time.Hour) // 60 days from now
+
+  // call the function to create new entry in the table for the refresh_token
+  refreshToken, err := apiCfg.db.CreateRefreshToken(context.Background(), database.CreateRefreshTokenParams{
+    Token:      refreshTokenString,
+    CreatedAt:  time.Now(),
+    UpdatedAt:  time.Now(),
+    UserID:     user.ID,
+    ExpiresAt:  expiryDate,
+    RevokedAt:  sql.NullTime{},
+  })
+  if err != nil {
+    w.WriteHeader(http.StatusInternalServerError)
+    fmt.Errorf("Error creating refresh token")
+    return
+  }
+
   response := UserResponse {
     ID:           user.ID,
     Email:        user.Email,
     Token:        jwtToken,
+    RefreshToken: refreshToken.Token,
     CreatedAt:    user.CreatedAt,
     UpdatedAt:    user.UpdatedAt,
   }
