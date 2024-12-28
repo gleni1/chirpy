@@ -1,56 +1,54 @@
 package main
 
 import (
+	_ "database/sql"
 	"net/http"
-	"time"
-
-	"github.com/bootdotdev/learn-http-servers/internal/auth"
+  "context"
+  "time"
+  "encoding/json"
+  "chirpy/internal/auth"
 )
 
-func (cfg *apiConfig) handlerRefresh(w http.ResponseWriter, r *http.Request) {
-	type response struct {
-		Token string `json:"token"`
-	}
+func (apiCfg *apiConfig) handleRefreshToken(w http.ResponseWriter, r *http.Request) {
+  token, err := auth.GetBearerToken(r.Header)
+  if err != nil {
+    http.Error(w, "Unauthorized", http.StatusUnauthorized)
+    return
+  }
 
-	refreshToken, err := auth.GetBearerToken(r.Header)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Couldn't find token", err)
-		return
-	}
+  tokenStruct, err := apiCfg.db.GetToken(context.Background(), token)
+  if err != nil {
+    http.Error(w, "Status Unauthorized", http.StatusUnauthorized)
+    return
+  }
 
-	user, err := cfg.db.GetUserFromRefreshToken(r.Context(), refreshToken)
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Couldn't get user for refresh token", err)
-		return
-	}
+  if time.Now().After(tokenStruct.ExpiresAt) {
+    http.Error(w, "Status Unauthorized", http.StatusUnauthorized)
+    return
+  }
 
-	accessToken, err := auth.MakeJWT(
-		user.ID,
-		cfg.jwtSecret,
-		time.Hour,
-	)
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Couldn't validate token", err)
-		return
-	}
+  if tokenStruct.RevokedAt.Valid {
+    http.Error(w, "Status Unauthorized", http.StatusUnauthorized)
+    return
+  }
 
-	respondWithJSON(w, http.StatusOK, response{
-		Token: accessToken,
-	})
-}
+  accessToken, err := auth.MakeJWT(tokenStruct.UserID, apiCfg.SecretKey)
+  if err != nil {
+    http.Error(w, "Internal Server Error: unable to create access token", http.StatusInternalServerError)
+    return
+  }
 
-func (cfg *apiConfig) handlerRevoke(w http.ResponseWriter, r *http.Request) {
-	refreshToken, err := auth.GetBearerToken(r.Header)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Couldn't find token", err)
-		return
-	}
 
-	_, err = cfg.db.RevokeRefreshToken(r.Context(), refreshToken)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't revoke session", err)
-		return
-	}
+  w.Header().Set("Content-Type", "application/json")
+  
+  response := map[string]string {
+    "token": accessToken,
+  }
 
-	w.WriteHeader(http.StatusNoContent)
+  encoder := json.NewEncoder(w)
+  err = encoder.Encode(&response)
+  if err != nil {
+    http.Error(w, "Internal Server Error: could not encode response", http.StatusInternalServerError)
+  }
+
 }
