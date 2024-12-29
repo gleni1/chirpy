@@ -170,3 +170,63 @@ func (apiCfg *apiConfig) handleUserLogin(w http.ResponseWriter, r *http.Request)
   w.Write(data)
   return
 }
+
+
+
+func (apiCfg *apiConfig) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
+  token, err := auth.GetBearerToken(r.Header)
+  if err != nil {
+    w.WriteHeader(http.StatusUnauthorized)
+    return
+  }
+  
+  userID, err := auth.ValidateJWT(token, apiCfg.SecretKey)
+  if err != nil {
+    w.WriteHeader(http.StatusUnauthorized)
+    return
+  }
+
+
+  var usrData UserData
+  decoder := json.NewDecoder(r.Body)
+  err = decoder.Decode(&usrData)
+  if err != nil {
+    w.WriteHeader(http.StatusInternalServerError)
+    fmt.Errorf("Error decoding the userParams: %w", err)
+    return
+  }
+
+  password := usrData.Password
+  hashedPassword, err := auth.HashPassword(password)
+  if err != nil {
+    w.WriteHeader(http.StatusInternalServerError)
+    fmt.Errorf("Error hashing the password")
+    return
+  }
+
+
+  err = apiCfg.db.UpdateUser(context.Background(), database.UpdateUserParams{
+    Email:              usrData.EmailVal,
+    HashedPassword:     hashedPassword,
+    ID:                 userID,
+  })
+
+  if err != nil {
+    w.WriteHeader(http.StatusInternalServerError)
+    fmt.Errorf("Error updating the user info")
+    return
+  }
+
+  updatedUser := struct {
+    Email   string    `json:"email"` 
+  }{
+    Email:  usrData.EmailVal,
+  }
+
+
+  w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+  json.NewEncoder(w).Encode(updatedUser)
+  return
+  
+}
