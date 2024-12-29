@@ -134,3 +134,54 @@ func (cfg *apiConfig) handleGetOneChirp(w http.ResponseWriter, r *http.Request) 
     return
   }
 }
+
+func (cfg *apiConfig) handleDeleteOneChirp(w http.ResponseWriter, r *http.Request) {
+  chirpId := r.PathValue("chirpID")
+  parsedID, err := uuid.Parse(chirpId)
+  if err != nil {
+    w.WriteHeader(http.StatusBadRequest) // 400 for invalid ID format
+    return
+  }
+
+  token, err := auth.GetBearerToken(r.Header)
+  if err != nil {
+    w.WriteHeader(http.StatusUnauthorized) // 401 for missing or invalid token
+    return
+  }
+
+  userID, err := auth.ValidateJWT(token, cfg.SecretKey)
+  if err != nil {
+    w.WriteHeader(http.StatusUnauthorized) // 401 for failed validation
+    return
+  }
+
+  // Fetch chirp details to verify ownership
+  chirp, err := cfg.db.GetOneChirp(context.Background(), parsedID)
+  if err != nil {
+    if errors.Is(err, sql.ErrNoRows) {
+      w.WriteHeader(http.StatusNotFound) // 404 if chirp not found
+      return
+    }
+    http.Error(w, "Internal server error", http.StatusInternalServerError)
+    return
+  }
+
+  if chirp.UserID != userID {
+    w.WriteHeader(http.StatusForbidden) // 403 if user is not the author
+    return
+  }
+
+  // Proceed with deletion if authorized
+  err = cfg.db.DeleteOneChirp(context.Background(), database.DeleteOneChirpParams{
+    ID: parsedID,
+    UserID: userID,
+  })
+
+  if err != nil {
+    // We've already checked for specific errors, remaining are internal.
+    http.Error(w, "Internal server error", http.StatusInternalServerError)
+    return
+  }
+
+  w.WriteHeader(http.StatusNoContent)
+}
