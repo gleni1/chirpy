@@ -26,6 +26,7 @@ type UserResponse struct {
     UpdatedAt     time.Time `json:"updated_at"`
     Token         string    `json:"token"`
     RefreshToken  string    `json:"refresh_token"`
+    IsChirpyRed   bool      `json:"is_chirpy_red"`
 }
 
 func getExpirationDuration(seconds int) time.Duration {
@@ -76,6 +77,7 @@ func (apiCfg *apiConfig) handleCreateNewUser(w http.ResponseWriter, r *http.Requ
     Email:        user.Email,
     CreatedAt:    user.CreatedAt,
     UpdatedAt:    user.UpdatedAt,
+    IsChirpyRed:  user.IsChirpyRed,
   }
 
   data, err := json.Marshal(response)
@@ -156,6 +158,7 @@ func (apiCfg *apiConfig) handleUserLogin(w http.ResponseWriter, r *http.Request)
     RefreshToken: refreshToken.Token,
     CreatedAt:    user.CreatedAt,
     UpdatedAt:    user.UpdatedAt,
+    IsChirpyRed:  user.IsChirpyRed,
   }
 
   data, err := json.Marshal(response)
@@ -229,4 +232,45 @@ func (apiCfg *apiConfig) handleUpdateUser(w http.ResponseWriter, r *http.Request
   json.NewEncoder(w).Encode(updatedUser)
   return
   
+}
+
+type Webhook struct {
+	Event string `json:"event"`
+	Data  struct {
+		UserID string `json:"user_id"`
+	} `json:"data"`
+}
+
+func (apiCfg *apiConfig) handleWebhooks(w http.ResponseWriter, r *http.Request) {
+  var webhook Webhook
+  decoder := json.NewDecoder(r.Body)
+  err := decoder.Decode(&webhook)
+  if err != nil {
+    w.WriteHeader(http.StatusInternalServerError)
+    return
+  }
+
+  if webhook.Event != "user.upgraded" {
+    w.WriteHeader(http.StatusNoContent)
+    return
+  }
+
+  userID, _ := uuid.Parse(webhook.Data.UserID)
+
+  _, err = apiCfg.db.GetUserById(context.Background(), userID)
+  if err != nil {
+    w.WriteHeader(http.StatusNotFound)
+    return
+  }
+
+  err = apiCfg.db.UpgradeToChirpyRed(context.Background(), userID)
+  if err != nil {
+    w.WriteHeader(http.StatusInternalServerError)
+    return
+  }
+
+  w.Header().Set("Content-Type", "application/json; charset=utf-8")
+  w.WriteHeader(http.StatusNoContent)
+  return
+
 }
