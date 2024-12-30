@@ -116,8 +116,8 @@ func main() {
   mux.HandleFunc("POST /api/revoke", apiCfg.handleRevokeToken)
   mux.HandleFunc("POST /api/polka/webhooks", apiCfg.handleWebhooks)
   mux.HandleFunc("PUT /api/users", apiCfg.handleUpdateUser)
-  mux.HandleFunc("GET  /api/chirps", apiCfg.handleGetChirps)
-  mux.HandleFunc("GET  /api/chirps/{chirpID}", apiCfg.handleGetOneChirp)
+  mux.HandleFunc("GET /api/chirps", apiCfg.handleGetChirps)
+  mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handleGetOneChirp)
   mux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.handleDeleteOneChirp)
 
   srv := &http.Server{

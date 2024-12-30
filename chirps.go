@@ -83,12 +83,31 @@ func (cfg *apiConfig) handleGetChirps(w http.ResponseWriter, r *http.Request) {
     return
   }
 
+  authorID := r.URL.Query().Get("author_id")
+  uID, _ := uuid.Parse(authorID)
+  if authorID != "" {
+    chirps, err := cfg.db.GetChirpsByAuthor(context.Background(), uID)
+    if err != nil {
+      http.Error(w, "Internal server errror:", http.StatusInternalServerError)
+    }
+
+    w.Header().Set("Content-Type", "application/json; charset=utf-8")
+    w.WriteHeader(http.StatusOK)
+
+    encoder := json.NewEncoder(w)
+    err = encoder.Encode(chirps)
+    if err != nil {
+      log.Printf("Error encoding response: %w", err)
+      return
+    }
+    return
+  } 
+
   chirps, err := cfg.db.GetAllChirps(context.Background())
   if err != nil {
     http.Error(w, "Internal server error:", http.StatusInternalServerError)
     return 
   }
-
 
   w.Header().Set("Content-Type", "application/json; charset=utf-8")
   w.WriteHeader(http.StatusOK)
