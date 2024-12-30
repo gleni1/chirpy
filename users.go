@@ -242,9 +242,21 @@ type Webhook struct {
 }
 
 func (apiCfg *apiConfig) handleWebhooks(w http.ResponseWriter, r *http.Request) {
+  apiKey, err := auth.GetAPIKey(r.Header)
+  if err != nil {
+    w.WriteHeader(http.StatusUnauthorized)
+    return
+  }
+
+  if apiKey != apiCfg.PolkaKey {
+    w.WriteHeader(http.StatusUnauthorized)
+    return
+  }
+
+
   var webhook Webhook
   decoder := json.NewDecoder(r.Body)
-  err := decoder.Decode(&webhook)
+  err = decoder.Decode(&webhook)
   if err != nil {
     w.WriteHeader(http.StatusInternalServerError)
     return

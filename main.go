@@ -18,6 +18,7 @@ type apiConfig struct {
   fileserverHits  atomic.Int32
   db              *database.Queries
   SecretKey       string
+  PolkaKey        string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -84,6 +85,7 @@ func main() {
 
   godotenv.Load()
   dbURL := os.Getenv("DB_URL")
+  polka := os.Getenv("POLKA_KEY")
   //start database
   db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -97,6 +99,7 @@ func main() {
     fileserverHits: atomic.Int32{},
     db:             dbQueries,
     SecretKey:      secKey,
+    PolkaKey:       polka,
   }
 
 	mux := http.NewServeMux()
