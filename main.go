@@ -57,6 +57,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 func handleResponseBody (w http.ResponseWriter, r *http.Request, msg string, stCode int) ([]byte, error) {
   var respBody map[string]interface{}
 
+  // check the status codes
   if stCode == 200 {
     respBody = map[string]interface{} {
       "valid": true,
