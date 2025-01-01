@@ -84,29 +84,39 @@ func (cfg *apiConfig) handleGetChirps(w http.ResponseWriter, r *http.Request) {
   }
 
   authorID := r.URL.Query().Get("author_id")
+  sortVal := r.URL.Query().Get("sort")
+
   uID, _ := uuid.Parse(authorID)
+
+  var chirps []database.Chirp
+  var err error
+
   if authorID != "" {
-    chirps, err := cfg.db.GetChirpsByAuthor(context.Background(), uID)
-    if err != nil {
-      http.Error(w, "Internal server errror:", http.StatusInternalServerError)
+    if sortVal == "desc"{
+      chirps, err = cfg.db.GetChirpsByAuthorDesc(context.Background(), uID)
+      if err != nil {
+        http.Error(w, "Internal server errror:", http.StatusInternalServerError)
+      }
+    } else {
+      chirps, err = cfg.db.GetChirpsByAuthor(context.Background(), uID)
+      if err != nil {
+        http.Error(w, "Internal server errror:", http.StatusInternalServerError)
+      }
     }
-
-    w.Header().Set("Content-Type", "application/json; charset=utf-8")
-    w.WriteHeader(http.StatusOK)
-
-    encoder := json.NewEncoder(w)
-    err = encoder.Encode(chirps)
-    if err != nil {
-      log.Printf("Error encoding response: %w", err)
-      return
+  } else {
+    if sortVal == "desc" {
+      chirps, err = cfg.db.GetAllChirpsDesc(context.Background())
+      if err != nil {
+        http.Error(w, "Internal server error:", http.StatusInternalServerError)
+        return 
+      }
+    } else {
+      chirps, err = cfg.db.GetAllChirps(context.Background())
+      if err != nil {
+        http.Error(w, "Internal server error:", http.StatusInternalServerError)
+        return 
+      }
     }
-    return
-  } 
-
-  chirps, err := cfg.db.GetAllChirps(context.Background())
-  if err != nil {
-    http.Error(w, "Internal server error:", http.StatusInternalServerError)
-    return 
   }
 
   w.Header().Set("Content-Type", "application/json; charset=utf-8")
