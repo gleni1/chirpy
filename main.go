@@ -109,7 +109,6 @@ func main() {
 	mux.HandleFunc("GET /admin/metrics", cfg.metrics)
   // the below request should be a DELETE method instead
   mux.HandleFunc("POST /admin/reset", apiCfg.resetNumReq)
-  // mux.HandleFunc("POST /api/validate_chirp", handlerChirpsValidate)
   mux.HandleFunc("POST /api/users", apiCfg.handleCreateNewUser)
   mux.HandleFunc("POST /api/chirps", apiCfg.handleCreateChirp)
   mux.HandleFunc("POST /api/login", apiCfg.handleUserLogin)
